@@ -24,7 +24,7 @@ const HamburgerMenu = ({showBackButton = true}) => {
     <View style={styles.container}>
       <View style={styles.appBar}>
         {showBackButton && (
-          <TouchableOpacity style={styles.backButton} onPress={goBack}>
+          <TouchableOpacity onPress={goBack}>
             <Image
               source={require('../../Assets/anterior.png')}
               style={styles.backButtonImage}
@@ -91,13 +91,14 @@ const styles = StyleSheet.create({
   },
   hamburgerButton: {
     backgroundColor: '#D43C12',
-    padding: 10,
-    borderRadius: 5,
+    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 5,
     width: 40,
     height: 40,
     position: 'absolute',
     right: 0,
+    top: 0,
   },
   hamburgerButtonText: {
     color: '#FFFFFF',
