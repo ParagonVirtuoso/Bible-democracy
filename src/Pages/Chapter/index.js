@@ -1,20 +1,25 @@
 import React, {useEffect, useState} from 'react';
 import {View, StyleSheet, Text, FlatList, TouchableOpacity} from 'react-native';
-import Tts from 'react-native-tts';
 import {BIBLIA_API_KEY} from '@env';
 import OptionsMenu from '../../Componentes/OptionsMenu';
 import HamburgerMenu from '../../Componentes/HambuguerMenu';
 import BooksHandleRequestGet from '../../Componentes/HandleRequest/BooksHandleRequestGet';
 import SkeletonPlaceholder from 'react-native-skeleton-placeholder';
 import ChapterNavigation from '../../Componentes/ChapterNavigation';
+import WordMenu from '../../Componentes/WordMenu';
+import ChapterPlayer from '../../Componentes/ChapterPlayer';
 
 export default function Chapter({route, navigation}) {
   const {name, chapter, abbrev, chapters} = route.params;
   const [verses, setVerses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [voices, setVoices] = useState([]);
   const [fontSize, setFontSize] = useState(16);
   const [optionsVisible, setOptionsVisible] = useState(false);
+  const [markedWords, setMarkedWords] = useState({});
+  const [selectedWord, setSelectedWord] = useState({
+    verse: null,
+    wordIndex: null,
+  });
   const disponibleVersion = ['acf', 'nvi', 'ra'];
 
   useEffect(() => {
@@ -28,52 +33,6 @@ export default function Chapter({route, navigation}) {
 
     fetchData();
   }, [abbrev.pt, chapter]);
-
-  useEffect(() => {
-    const fetchVoices = async () => {
-      try {
-        const status = await Tts.getInitStatus();
-        if (status === 'success') {
-          Tts.setDefaultLanguage('pt-BR');
-          const availableVoices = await Tts.voices();
-          setVoices(availableVoices);
-          const portugueseVoice = availableVoices.find(
-            voice => voice.language === 'pt-BR' && voice.quality === 'high',
-          );
-          if (portugueseVoice) {
-            Tts.setDefaultVoice(portugueseVoice.id);
-          }
-        }
-      } catch (e) {
-        console.error('Error fetching voices', e);
-      }
-    };
-
-    fetchVoices();
-  }, []);
-
-  const speakVerse = text => {
-    Tts.stop();
-    Tts.speak(text, {
-      androidParams: {
-        KEY_PARAM_PAN: 0,
-        KEY_PARAM_VOLUME: 1,
-        KEY_PARAM_STREAM: 'STREAM_MUSIC',
-      },
-    });
-  };
-
-  const speakChapter = () => {
-    const chapterText = verses.map(verse => verse.text).join(' ');
-    Tts.stop();
-    Tts.speak(chapterText, {
-      androidParams: {
-        KEY_PARAM_PAN: 0,
-        KEY_PARAM_VOLUME: 1,
-        KEY_PARAM_STREAM: 'STREAM_MUSIC',
-      },
-    });
-  };
 
   const handleVersionChange = version => async () => {
     setLoading(true);
@@ -97,15 +56,30 @@ export default function Chapter({route, navigation}) {
     setOptionsVisible(!optionsVisible);
   };
 
-  const renderVerse = ({item}) => (
-    <View style={styles.verseContainer}>
-      <Text style={styles.verseNumber}>{item.number}</Text>
-      <Text style={[styles.verseText, {fontSize}]}>{item.text}</Text>
-      <TouchableOpacity onPress={() => speakVerse(item.text)}>
-        <Text style={styles.speakButton}>🔊</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  const toggleMarkWord = (verseNumber, wordIndex) => {
+    setMarkedWords(prevMarkedWords => {
+      const currentMarks = prevMarkedWords[verseNumber] || [];
+      if (currentMarks.includes(wordIndex)) {
+        return {
+          ...prevMarkedWords,
+          [verseNumber]: currentMarks.filter(index => index !== wordIndex),
+        };
+      } else {
+        return {
+          ...prevMarkedWords,
+          [verseNumber]: [...currentMarks, wordIndex],
+        };
+      }
+    });
+  };
+
+  const openWordMenu = (verseNumber, wordIndex, text) => {
+    setSelectedWord({verse: verseNumber, wordIndex, text: text});
+  };
+
+  const closeWordMenu = () => {
+    setSelectedWord({verse: null, wordIndex: null, text: null});
+  };
 
   const handlePreviousChapter = () => {
     if (chapter > 1) {
@@ -141,46 +115,75 @@ export default function Chapter({route, navigation}) {
   return (
     <View style={styles.container}>
       <HamburgerMenu />
+      <Text style={styles.title}>{name}</Text>
+      <Text style={styles.description}>Capítulo {chapter}</Text>
       <OptionsMenu
         disponibleVersion={disponibleVersion}
         handleVersionChange={handleVersionChange}
-        speakChapter={speakChapter}
         increaseFontSize={increaseFontSize}
         decreaseFontSize={decreaseFontSize}
         optionsVisible={optionsVisible}
         toggleOptionsVisibility={toggleOptionsVisibility}
+        verses={verses}
       />
-      <Text style={styles.title}>{name}</Text>
-      <Text style={styles.description}>Capítulo {chapter}</Text>
+      <WordMenu
+        isVisible={
+          selectedWord.verse !== null && selectedWord.wordIndex !== null
+        }
+        onClose={closeWordMenu}
+        onMarkWord={() => {
+          toggleMarkWord(selectedWord.verse, selectedWord.wordIndex);
+        }}
+        text={selectedWord.text}
+      />
       {loading ? (
         <SkeletonPlaceholder>
-          <SkeletonPlaceholder.Item
-            marginBottom={10}
-            height={30}
-            width="100%"
-            borderRadius={5}
-          />
-          <SkeletonPlaceholder.Item
-            marginBottom={10}
-            height={30}
-            width="100%"
-            borderRadius={5}
-          />
-          <SkeletonPlaceholder.Item
-            marginBottom={10}
-            height={30}
-            width="100%"
-            borderRadius={5}
-          />
+          {[...Array(3)].map((_, index) => (
+            <SkeletonPlaceholder.Item
+              key={index}
+              marginBottom={10}
+              height={30}
+              width="100%"
+              borderRadius={5}
+            />
+          ))}
         </SkeletonPlaceholder>
       ) : (
         <FlatList
           data={verses}
           keyExtractor={item => item.number.toString()}
-          renderItem={renderVerse}
+          renderItem={({item}) => (
+            <View style={styles.verseContainer}>
+              <Text style={[styles.verseNumber, {fontSize}]}>
+                {item.number}
+              </Text>
+              <View style={styles.verseTextContainer}>
+                {item.text.split(' ').map((word, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => {
+                      const arrayPhrase = item.text.split(' ');
+                      openWordMenu(item.number, index, arrayPhrase[index]);
+                    }}
+                    style={styles.wordContainer}>
+                    <Text
+                      style={[
+                        markedWords[item.number]?.includes(index)
+                          ? styles.markedWord
+                          : styles.unmarkedWord,
+                        {fontSize},
+                      ]}>
+                      {word}{' '}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
           contentContainerStyle={styles.versesContainer}
         />
       )}
+      <ChapterPlayer verses={verses} />
       <ChapterNavigation
         onPrevious={handlePreviousChapter}
         onNext={handleNextChapter}
@@ -231,12 +234,17 @@ const styles = StyleSheet.create({
     marginRight: 10,
     color: '#D43C12',
   },
-  verseText: {
-    flex: 1,
+  verseTextContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
-  speakButton: {
-    marginLeft: 10,
-    fontSize: 20,
-    color: '#007AFF',
+  wordContainer: {
+    flexDirection: 'row',
+  },
+  markedWord: {
+    backgroundColor: '#D43C12',
+  },
+  unmarkedWord: {
+    backgroundColor: 'transparent',
   },
 });
